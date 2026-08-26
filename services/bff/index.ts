@@ -139,7 +139,6 @@ app.get("/api/traces/:traceId", async (request, reply) => {
 });
 
 if (process.env.SERVE_WEB === "true") {
-  app.get("/", async (_request, reply) => reply.sendFile("index.html"));
   app.setNotFoundHandler(async (request, reply) => {
     if (request.url.startsWith("/api/") || request.url === "/health") {
       return reply.code(404).send({ error: "Route not found" });

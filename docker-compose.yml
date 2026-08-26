@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: requestflow
+      POSTGRES_PASSWORD: requestflow
+      POSTGRES_DB: requestflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U requestflow -d requestflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.18
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/orchestrator/index.js"]
+    environment: &service-env
+      DATABASE_URL: postgres://requestflow:requestflow@postgres:5432/requestflow
+      KAFKA_BROKERS: redpanda:9092
+      USER_TOKEN_SECRET: local-user-secret-change-me
+      SERVICE_TOKEN_SECRET: local-service-secret-change-me
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  application-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/application-api/index.js"]
+    environment:
+      <<: *service-env
+      ORCHESTRATOR_URL: http://orchestrator:3003
+    ports:
+      - "3002:3002"
+    depends_on:
+      - orchestrator
+
+  bff:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/bff/index.js"]
+    environment:
+      <<: *service-env
+      APPLICATION_API_URL: http://application-api:3002
+      WEB_ORIGIN: http://localhost:5173
+    ports:
+      - "3001:3001"
+    depends_on:
+      - application-api
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/worker/index.js"]
+    environment:
+      <<: *service-env
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

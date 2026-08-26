@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "An interactive visualization of distributed backend request tracing and troubleshooting.",
   "private": true,
+  "type": "module",
   "keywords": [
     "react",
     "distributed-systems",
@@ -13,15 +14,41 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && mkdir -p dist/server dist/.openai && cp server/index.js dist/server/index.js && cp .openai/hosting.json dist/.openai/hosting.json",
+    "dev:services": "concurrently -k -n bff,api,orchestrator,worker \"tsx watch services/bff/index.ts\" \"tsx watch services/application-api/index.ts\" \"tsx watch services/orchestrator/index.ts\" \"tsx watch services/worker/index.ts\"",
+    "dev:all": "concurrently -k -n web,services \"vite\" \"npm run dev:services\"",
+    "build:web": "vite build",
+    "build:services": "tsc -p tsconfig.services.json",
+    "build": "npm run build:web && mkdir -p dist/server dist/.openai && cp server/index.js dist/server/index.js && cp .openai/hosting.json dist/.openai/hosting.json",
+    "build:all": "npm run build && npm run build:services",
+    "typecheck": "tsc -p tsconfig.services.json --noEmit",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke-test.mjs",
     "start": "vite preview"
   },
   "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
+    "@opentelemetry/resources": "^2.1.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "fastify": "^5.6.0",
+    "jose": "^6.1.0",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.16.0",
+    "pino": "^9.12.0",
     "react": "19.2.1",
-    "react-dom": "19.2.1"
+    "react-dom": "19.2.1",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "5.0.4",
-    "vite": "7.1.7"
+    "@types/node": "^24.7.0",
+    "@types/pg": "^8.15.0",
+    "concurrently": "^9.2.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "7.1.7",
+    "vitest": "^3.2.0"
   }
 }

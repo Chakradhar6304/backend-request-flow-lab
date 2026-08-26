@@ -192,13 +192,34 @@ export default function Home() {
   const [symptom, setSymptom] = useState("no-credit");
   const [checked, setChecked] = useState({});
   const [copied, setCopied] = useState(false);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [traceId, setTraceId] = useState("trc_9f2a7c81");
+  const [requestError, setRequestError] = useState("");
   const timer = useRef(null);
-  const traceId = "trc_9f2a7c81";
   const applicationId = "b63fd17e-2c64-4db6";
 
   const selectedComponent = COMPONENTS.find((item) => item.id === selected);
   const selectedTrouble = TROUBLESHOOTING.find((item) => item.id === symptom);
-  const stopIndex = SCENARIOS[scenario].stop ? TRACE_STEPS.findIndex((step) => step.component === SCENARIOS[scenario].stop) : TRACE_STEPS.length - 1;
+  const displaySteps = liveEvents.length ? liveEvents : TRACE_STEPS;
+  const stopIndex = liveEvents.length
+    ? liveEvents.length - 1
+    : SCENARIOS[scenario].stop
+      ? TRACE_STEPS.findIndex((step) => step.component === SCENARIOS[scenario].stop)
+      : TRACE_STEPS.length - 1;
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/health")
+      .then((response) => response.json())
+      .then((data) => {
+        if (active) setBackendOnline(data?.service === "bff" && data?.status === "ok");
+      })
+      .catch(() => {
+        if (active) setBackendOnline(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!running) return;
@@ -217,22 +238,93 @@ export default function Home() {
   useEffect(() => {
     setTraceIndex(-1);
     setRunning(false);
+    setLiveEvents([]);
+    setRequestError("");
   }, [scenario]);
 
   const states = useMemo(() => {
     const result = {};
     COMPONENTS.forEach((item) => { result[item.id] = "idle"; });
-    TRACE_STEPS.forEach((step, index) => {
+    displaySteps.forEach((step, index) => {
       if (index < traceIndex) result[step.component] = "done";
-      if (index === traceIndex) result[step.component] = index === stopIndex && SCENARIOS[scenario].stop ? SCENARIOS[scenario].severity : "active";
+      if (index === traceIndex) {
+        result[step.component] = step.status === "error"
+          ? "error"
+          : step.status === "warning"
+            ? "warning"
+            : index === stopIndex && SCENARIOS[scenario].stop && !liveEvents.length
+              ? SCENARIOS[scenario].severity
+              : "active";
+      }
     });
     return result;
-  }, [traceIndex, scenario, stopIndex]);
+  }, [traceIndex, scenario, stopIndex, displaySteps, liveEvents.length]);
 
-  const run = () => {
+  const runSimulation = () => {
     if (traceIndex >= stopIndex) setTraceIndex(-1);
     setRunning(true);
   };
+
+  const runLiveRequest = async () => {
+    setTraceIndex(-1);
+    setLiveEvents([]);
+    setRequestError("");
+    setRunning(true);
+
+    try {
+      const tokenResponse = await fetch("/api/demo-token", { method: "POST" });
+      if (!tokenResponse.ok) throw new Error("The BFF demo token endpoint is unavailable.");
+      const { token } = await tokenResponse.json();
+      const nextTraceId = `trc_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
+      setTraceId(nextTraceId);
+      const startedAt = performance.now();
+      const webEvent = {
+        component: "web",
+        event: "POST /api/requests",
+        detail: "React submitted the scenario to the live BFF with a user JWT.",
+        status: "success",
+        durationMs: 0,
+        timestamp: new Date().toISOString()
+      };
+      const response = await fetch("/api/requests", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${scenario === "userToken" ? "invalid-user-token" : token}`,
+          "content-type": "application/json",
+          "x-trace-id": nextTraceId
+        },
+        body: JSON.stringify({ scenario })
+      });
+      const payload = await response.json();
+      webEvent.durationMs = Math.round(performance.now() - startedAt);
+      const events = [webEvent, ...(payload.events ?? [])];
+      setLiveEvents(events);
+      setTraceIndex(0);
+      if (!response.ok) setRequestError(payload.error ?? `Request stopped with HTTP ${response.status}.`);
+
+      if (response.ok && payload.traceId) {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 450));
+          const traceResponse = await fetch(`/api/traces/${payload.traceId}`, {
+            headers: { authorization: `Bearer ${token}` }
+          });
+          if (!traceResponse.ok) continue;
+          const persisted = await traceResponse.json();
+          const workerEvent = persisted.events?.find((event) => event.component === "parser");
+          if (workerEvent) {
+            setLiveEvents((current) => current.some((event) => event.component === "parser") ? current : [...current, workerEvent]);
+            setRunning(true);
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      setRunning(false);
+      setRequestError(error instanceof Error ? error.message : "Live request failed.");
+    }
+  };
+
+  const run = () => backendOnline ? runLiveRequest() : runSimulation();
 
   const step = () => {
     setRunning(false);
@@ -242,6 +334,9 @@ export default function Home() {
   const reset = () => {
     setRunning(false);
     setTraceIndex(-1);
+    setLiveEvents([]);
+    setRequestError("");
+    setTraceId("trc_9f2a7c81");
   };
 
   const copyQuery = async () => {
@@ -278,11 +373,11 @@ export default function Home() {
                 {Object.entries(SCENARIOS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
               </select>
             </div>
-            <div className="trace-meta"><span><i className="live-dot" /> Trace ready</span><code>{traceId}</code></div>
+            <div className="trace-meta"><span><i className={`live-dot ${backendOnline ? "connected" : ""}`} /> {backendOnline ? "Live services" : "Simulation mode"}</span><code>{traceId}</code></div>
             <div className="run-controls">
               <button className="icon-button" onClick={reset} aria-label="Reset trace" title="Reset"><Icon name="reset" /></button>
               <button className="icon-button" onClick={step} aria-label="Step through trace" title="Step"><Icon name="step" /></button>
-              <button className="run-button" onClick={run} disabled={running}><Icon name="play" size={16} /> {running ? "Running" : "Run request"}</button>
+              <button className="run-button" onClick={run} disabled={running}><Icon name="play" size={16} /> {running ? "Running" : backendOnline ? "Run live request" : "Run request"}</button>
             </div>
           </div>
 
@@ -309,13 +404,13 @@ export default function Home() {
               <div className="detail-block"><span>Owns</span><strong>{selectedComponent.owns}</strong></div>
               <div className="check-callout"><Icon name="search" /><div><span>First thing to check</span><p>{selectedComponent.check}</p></div></div>
               <div className="active-trace">
-                <div className="active-head"><span>Live trace</span><small>{traceIndex < 0 ? "Waiting" : `${Math.min(traceIndex + 1, TRACE_STEPS.length)} / ${TRACE_STEPS.length}`}</small></div>
+                <div className="active-head"><span>{backendOnline ? "Persisted trace" : "Simulated trace"}</span><small>{traceIndex < 0 ? "Waiting" : `${Math.min(traceIndex + 1, displaySteps.length)} / ${displaySteps.length}`}</small></div>
                 {traceIndex < 0 ? (
                   <div className="trace-empty"><span className="pulse-ring" /><p>Choose a scenario, then run or step through it.</p></div>
                 ) : (
-                  <div className={`trace-event ${traceIndex === stopIndex && SCENARIOS[scenario].stop ? SCENARIOS[scenario].severity : ""}`}>
-                    <span className="event-status">{traceIndex === stopIndex && SCENARIOS[scenario].stop ? <Icon name="alert" /> : <Icon name="check" />}</span>
-                    <div><strong>{TRACE_STEPS[traceIndex].event}</strong><p>{traceIndex === stopIndex && SCENARIOS[scenario].stop ? SCENARIOS[scenario].summary : TRACE_STEPS[traceIndex].detail}</p><code>{traceId} · +{(traceIndex * 84 + 31)}ms</code></div>
+                  <div className={`trace-event ${displaySteps[traceIndex]?.status === "error" ? "error" : displaySteps[traceIndex]?.status === "warning" ? "warning" : traceIndex === stopIndex && SCENARIOS[scenario].stop && !liveEvents.length ? SCENARIOS[scenario].severity : ""}`}>
+                    <span className="event-status">{displaySteps[traceIndex]?.status === "error" || displaySteps[traceIndex]?.status === "warning" || (traceIndex === stopIndex && SCENARIOS[scenario].stop && !liveEvents.length) ? <Icon name="alert" /> : <Icon name="check" />}</span>
+                    <div><strong>{displaySteps[traceIndex]?.event}</strong><p>{requestError && traceIndex === stopIndex ? requestError : traceIndex === stopIndex && SCENARIOS[scenario].stop && !liveEvents.length ? SCENARIOS[scenario].summary : displaySteps[traceIndex]?.detail}</p><code>{traceId} · {displaySteps[traceIndex]?.durationMs !== undefined ? `${displaySteps[traceIndex].durationMs}ms` : `+${traceIndex * 84 + 31}ms`}</code></div>
                   </div>
                 )}
               </div>

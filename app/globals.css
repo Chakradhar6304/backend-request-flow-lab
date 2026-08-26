@@ -52,7 +52,8 @@ select:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-sof
 .trace-meta { text-align: center; display: flex; flex-direction: column; gap: 4px; }
 .trace-meta span { display: flex; justify-content: center; align-items: center; gap: 7px; text-transform: uppercase; font-size: 10px; letter-spacing: .12em; font-weight: 800; color: var(--muted); }
 .trace-meta code { font-size: 11px; color: var(--green-dark); }
-.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #22a66e; box-shadow: 0 0 0 4px var(--green-soft); }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 4px #f8efcf; }
+.live-dot.connected { background: #22a66e; box-shadow: 0 0 0 4px var(--green-soft); }
 .run-controls { justify-self: end; display: flex; gap: 8px; }
 .icon-button, .run-button { border: 0; border-radius: 9px; min-height: 40px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .icon-button { width: 40px; background: #eef1ec; color: var(--ink); }

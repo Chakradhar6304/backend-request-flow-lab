@@ -1,6 +1,8 @@
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import {
   issueServiceToken,
   issueUserToken,
@@ -20,7 +22,15 @@ startTelemetry("request-flow-bff");
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: config.webOrigin });
 
+if (process.env.SERVE_WEB === "true") {
+  await app.register(fastifyStatic, {
+    root: join(process.cwd(), "dist/client"),
+    wildcard: false
+  });
+}
+
 app.get("/health", async () => ({ service: "bff", status: "ok" }));
+app.get("/api/health", async () => ({ service: "bff", status: "ok" }));
 
 app.post("/api/demo-token", async () => ({
   token: await issueUserToken(config.userTokenSecret),
@@ -128,4 +138,17 @@ app.get("/api/traces/:traceId", async (request, reply) => {
   return reply.code(result.status).send(result.payload);
 });
 
-await app.listen({ host: "0.0.0.0", port: 3001 });
+if (process.env.SERVE_WEB === "true") {
+  app.get("/", async (_request, reply) => reply.sendFile("index.html"));
+  app.setNotFoundHandler(async (request, reply) => {
+    if (request.url.startsWith("/api/") || request.url === "/health") {
+      return reply.code(404).send({ error: "Route not found" });
+    }
+    return reply.sendFile("index.html");
+  });
+}
+
+await app.listen({
+  host: "0.0.0.0",
+  port: Number(process.env.PORT ?? 3001)
+});

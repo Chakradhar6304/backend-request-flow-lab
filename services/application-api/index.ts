@@ -104,4 +104,7 @@ app.get("/v1/traces/:traceId", async (request, reply) => {
   return reply.code(result.status).send(result.payload);
 });
 
-await app.listen({ host: "0.0.0.0", port: 3002 });
+await app.listen({
+  host: "0.0.0.0",
+  port: Number(process.env.PORT ?? 3002)
+});

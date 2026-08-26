@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: requestflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: requestflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.18
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda.railway.internal:9092
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/orchestrator/index.js"]
+    environment: &service-env
+      DATABASE_URL: postgresql://requestflow:${POSTGRES_PASSWORD}@postgres.railway.internal:5432/requestflow
+      KAFKA_BROKERS: redpanda.railway.internal:9092
+      USER_TOKEN_SECRET: ${USER_TOKEN_SECRET}
+      SERVICE_TOKEN_SECRET: ${SERVICE_TOKEN_SECRET}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger.railway.internal:4318
+      PORT: "3003"
+
+  application-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/application-api/index.js"]
+    environment:
+      <<: *service-env
+      ORCHESTRATOR_URL: http://orchestrator.railway.internal:3003
+      PORT: "3002"
+
+  bff:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/bff/index.js"]
+    environment:
+      <<: *service-env
+      APPLICATION_API_URL: http://application-api.railway.internal:3002
+      PORT: "3001"
+      SERVE_WEB: "true"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: ["node", "backend-dist/services/worker/index.js"]
+    environment:
+      <<: *service-env
+      PORT: "3004"
+
+volumes:
+  postgres-data:
+  redpanda-data:

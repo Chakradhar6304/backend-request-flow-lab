@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import {
+  ensureSchema,
   recordTraceEvent,
   updateApplicationStatus
 } from "../../shared/database.js";
@@ -15,6 +16,7 @@ startTelemetry("application-event-worker");
 const health = Fastify({ logger: true });
 const consumer = kafka.consumer({ groupId: "request-flow-worker-v1" });
 
+await ensureSchema();
 await consumer.connect();
 await consumer.subscribe({ topic: applicationTopic, fromBeginning: false });
 
@@ -57,4 +59,7 @@ await consumer.run({
 
 health.get("/health", async () => ({ service: "worker", status: "ok" }));
 health.addHook("onClose", async () => consumer.disconnect());
-await health.listen({ host: "0.0.0.0", port: 3004 });
+await health.listen({
+  host: "0.0.0.0",
+  port: Number(process.env.PORT ?? 3004)
+});

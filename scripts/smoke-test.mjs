@@ -15,6 +15,14 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 }
 if (!healthy) throw new Error("BFF did not become healthy within 60 seconds");
 
+const apiHealthResponse = await fetch(`${bffUrl}/api/health`);
+if (!apiHealthResponse.ok) throw new Error("Public API health route is unavailable");
+
+const webResponse = await fetch(bffUrl);
+if (!webResponse.ok || !(await webResponse.text()).includes("Backend Request Flow Lab")) {
+  throw new Error("BFF did not serve the production React application");
+}
+
 const tokenResponse = await fetch(`${bffUrl}/api/demo-token`, { method: "POST" });
 if (!tokenResponse.ok) throw new Error("Could not obtain the demo user token");
 const { token } = await tokenResponse.json();

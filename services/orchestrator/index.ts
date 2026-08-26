@@ -4,6 +4,7 @@ import { verifyBearer } from "../../shared/auth.js";
 import { config } from "../../shared/config.js";
 import {
   createApplication,
+  ensureSchema,
   getTrace,
   recordTraceEvent,
   updateApplicationStatus
@@ -23,7 +24,10 @@ startTelemetry("workflow-orchestrator");
 const app = Fastify({ logger: true });
 const producer = kafka.producer();
 
-app.addHook("onReady", async () => producer.connect());
+app.addHook("onReady", async () => {
+  await ensureSchema();
+  await producer.connect();
+});
 app.addHook("onClose", async () => producer.disconnect());
 
 app.get("/health", async () => ({ service: "orchestrator", status: "ok" }));
@@ -158,4 +162,7 @@ app.get("/v1/traces/:traceId", async (request, reply) => {
   return result;
 });
 
-await app.listen({ host: "0.0.0.0", port: 3003 });
+await app.listen({
+  host: "0.0.0.0",
+  port: Number(process.env.PORT ?? 3003)
+});

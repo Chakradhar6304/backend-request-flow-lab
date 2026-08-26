@@ -78,6 +78,22 @@ Stop the environment:
 docker compose down -v
 ```
 
+## Public Railway deployment
+
+The production Compose file packages the React experience into the public BFF
+container while keeping the API, orchestrator, worker, PostgreSQL, Redpanda,
+and Jaeger services on Railway's private network.
+
+1. Create an empty Railway project.
+2. Drag `docker-compose.railway.yml` onto the project canvas.
+3. Set project variables `POSTGRES_PASSWORD`, `USER_TOKEN_SECRET`, and
+   `SERVICE_TOKEN_SECRET` to independent, randomly generated values.
+4. Apply the staged services and generate a public domain only for `bff`.
+5. Verify `/api/health`, run a healthy request, and confirm the trace completes.
+
+The database schema is created idempotently at service startup, so the Railway
+PostgreSQL container does not depend on a bind-mounted initialization script.
+
 ## Run verification
 
 ```bash

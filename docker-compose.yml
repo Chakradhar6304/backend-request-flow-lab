@@ -91,6 +91,7 @@ services:
       <<: *service-env
       APPLICATION_API_URL: http://application-api:3002
       WEB_ORIGIN: http://localhost:5173
+      SERVE_WEB: "true"
     ports:
       - "3001:3001"
     depends_on:

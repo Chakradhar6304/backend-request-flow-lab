@@ -9,7 +9,7 @@ const COMPONENTS = [
     name: "Application Web",
     role: "Starts the request",
     zone: "Browser",
-    description: "The Angular portal collects the user action and calls the BFF on its configured localhost or deployed URL.",
+    description: "The React client collects the scenario and calls the BFF through the same deployed origin.",
     check: "Verify the Web config points to the BFF port and the BFF allows the Web origin.",
     owns: "User interaction, request payload, user session"
   },
@@ -56,22 +56,22 @@ const COMPONENTS = [
   {
     id: "parser",
     short: "EVT",
-    name: "Application Event Parser",
+    name: "Application Event Worker",
     role: "Consumes the event",
     zone: "Worker",
-    description: "The Event Parser listens to Kafka, parses the application event, and runs background updates after the API response path.",
+    description: "The TypeScript worker consumes Kafka events and persists background completion after the synchronous API response.",
     check: "Look for the listening/consumer-ready log before testing. No listener means the request can succeed while the event is never processed.",
     owns: "Event consumption, parsing, background update"
   },
   {
     id: "splunk",
     short: "LOG",
-    name: "Splunk",
+    name: "OpenTelemetry",
     role: "Correlates the evidence",
     zone: "Observe",
-    description: "Splunk brings API, orchestrator, and worker logs together using one trace ID or application UUID.",
-    check: "Use app IN (Application API app ID, Orchestrator app ID) and filter by the UUID alone when a copied field is too specific.",
-    owns: "Logs, cross-service correlation, failure evidence"
+    description: "OpenTelemetry sends spans from the BFF, API, orchestrator, and worker to Jaeger using one propagated trace ID.",
+    check: "Filter Jaeger by service and correlate the visible trace ID with structured service logs and persisted events.",
+    owns: "Distributed spans, cross-service correlation, failure evidence"
   }
 ];
 
@@ -115,7 +115,7 @@ const TRACE_STEPS = [
   { component: "orch", event: "Execute workflow", detail: "Orchestrator coordinates application and credit work." },
   { component: "kafka", event: "Publish application event", detail: "Workflow result is placed on the configured topic." },
   { component: "parser", event: "Consume and parse", detail: "Event Parser receives the message and performs background work." },
-  { component: "splunk", event: "Correlate logs", detail: "The same trace ID ties the request together across services." }
+  { component: "splunk", event: "Export telemetry", detail: "OpenTelemetry exports correlated spans to the internal Jaeger collector." }
 ];
 
 const TROUBLESHOOTING = [

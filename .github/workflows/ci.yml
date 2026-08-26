@@ -22,6 +22,11 @@ jobs:
       - run: npm test
       - run: npm run build:all
       - run: docker compose config --quiet
+      - run: docker compose -f docker-compose.railway.yml config --quiet
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          USER_TOKEN_SECRET: ci-user-token-secret
+          SERVICE_TOKEN_SECRET: ci-service-token-secret
 
   integration:
     runs-on: ubuntu-latest

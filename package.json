@@ -1,0 +1,27 @@
+{
+  "name": "backend-request-flow-lab",
+  "version": "1.0.0",
+  "description": "An interactive visualization of distributed backend request tracing and troubleshooting.",
+  "private": true,
+  "keywords": [
+    "react",
+    "distributed-systems",
+    "request-tracing",
+    "observability",
+    "kafka",
+    "oauth"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && mkdir -p dist/server dist/.openai && cp server/index.js dist/server/index.js && cp .openai/hosting.json dist/.openai/hosting.json",
+    "start": "vite preview"
+  },
+  "dependencies": {
+    "react": "19.2.1",
+    "react-dom": "19.2.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "5.0.4",
+    "vite": "7.1.7"
+  }
+}

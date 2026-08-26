@@ -125,10 +125,6 @@ docs/architecture.md         Detailed request lifecycle
 .github/workflows/ci.yml     Build, test, and integration pipeline
 ```
 
-## Resume-ready summary
-
-Built a containerized TypeScript distributed-systems lab with four services, audience-scoped JWT authentication, PostgreSQL trace persistence, Kafka event processing, OpenTelemetry/Jaeger observability, deterministic failure injection, and automated unit and end-to-end CI verification.
-
 ## License
 
 MIT

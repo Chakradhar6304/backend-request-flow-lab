@@ -70,6 +70,8 @@ flowchart TD
 - Unit tests for auth and event contracts
 - Docker Compose environment and an end-to-end smoke test
 - GitHub Actions verification and integration jobs
+- Live aggregate metrics for request outcomes, success rate, and p95 latency
+- A free-tier public runtime that launches all four services in one container
 
 ## Stack
 
@@ -105,9 +107,17 @@ Stop the environment:
 docker compose down -v
 ```
 
-## Optional full-stack cloud deployment
+## Free full-stack public deployment
 
-`docker-compose.railway.yml` is included as an optional production deployment blueprint. It packages the React app into the public BFF container while keeping the API, orchestrator, worker, PostgreSQL, Redpanda, and Jaeger on a private service network. No paid cloud resources are required to view the public demo or verify the project through GitHub Actions.
+`render.yaml` runs the BFF, Application API, orchestrator, event worker, and React client inside one free Render web service. The deployment connects to Aiven's free PostgreSQL and Kafka tiers using TLS and SASL/SCRAM authentication.
+
+1. Create free Aiven PostgreSQL and Kafka services.
+2. Create the `application.created.v1` Kafka topic and enable SASL authentication.
+3. In Render, create a Blueprint from this repository.
+4. Provide `DATABASE_URL`, `KAFKA_BROKERS`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_CA_CERT` when prompted. Render generates the JWT secrets automatically.
+5. Open the Render URL and wait for the health check. Free services may need a cold-start period after inactivity.
+
+`docker-compose.railway.yml` remains available as an optional multi-container blueprint for environments that support Docker Compose deployments.
 
 ## Run verification
 
@@ -115,6 +125,7 @@ docker compose down -v
 npm run typecheck
 npm test
 npm run build:all
+npm run validate:deployment
 ```
 
 ## Service map

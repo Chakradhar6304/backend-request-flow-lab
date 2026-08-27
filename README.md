@@ -1,8 +1,35 @@
 # Backend Request Flow Lab
 
+**[Open the live interactive demo](https://backend-request-flow-lab.chakradharnemali.chatgpt.site)** · **[View CI runs](https://github.com/Chakradhar6304/backend-request-flow-lab/actions)**
+
 A working TypeScript distributed-systems lab that makes an end-to-end backend request visible. It combines an interactive React trace UI with independently runnable services, JWT authentication boundaries, PostgreSQL state, Kafka-compatible event processing, OpenTelemetry spans, deterministic failure injection, automated tests, and CI.
 
 > All names, identifiers, payloads, and failure scenarios are fictitious. The repository contains no proprietary code, credentials, or production data.
+
+## What this project demonstrates
+
+Backend requests are difficult to debug when they cross several services and then continue asynchronously. This project turns that invisible flow into a trace that can be explored step by step.
+
+In the public demo, a visitor can:
+
+- Run a healthy request from the web client through the BFF, API, orchestrator, Kafka, and worker
+- Click each component to understand its responsibility
+- Follow a trace ID across service boundaries
+- Compare user JWT and service JWT authentication
+- Inject token, Kafka, and missing-result failures and see exactly where they stop the flow
+- Use symptom-based troubleshooting guidance to identify the likely failing service
+
+The project demonstrates practical knowledge of API design, microservice boundaries, asynchronous event processing, authentication, observability, failure handling, automated testing, and containerized development.
+
+## Demo and backend verification
+
+| Environment | What runs |
+|---|---|
+| [Public demo](https://backend-request-flow-lab.chakradharnemali.chatgpt.site) | The React experience runs in interactive simulation mode so anyone can explore it for free without permanent cloud infrastructure. |
+| Local Docker Compose | The real BFF, Application API, orchestrator, worker, PostgreSQL, Redpanda/Kafka, and Jaeger stack runs end to end. |
+| GitHub Actions | The complete containerized stack is built and smoke-tested automatically on every change. |
+
+The public UI does not pretend to be connected to always-on backend services. It labels simulation mode clearly; the real integration is reproducible locally and verified in CI.
 
 ## What happens when a request runs
 
@@ -78,21 +105,9 @@ Stop the environment:
 docker compose down -v
 ```
 
-## Public Railway deployment
+## Optional full-stack cloud deployment
 
-The production Compose file packages the React experience into the public BFF
-container while keeping the API, orchestrator, worker, PostgreSQL, Redpanda,
-and Jaeger services on Railway's private network.
-
-1. Create an empty Railway project.
-2. Drag `docker-compose.railway.yml` onto the project canvas.
-3. Set project variables `POSTGRES_PASSWORD`, `USER_TOKEN_SECRET`, and
-   `SERVICE_TOKEN_SECRET` to independent, randomly generated values.
-4. Apply the staged services and generate a public domain only for `bff`.
-5. Verify `/api/health`, run a healthy request, and confirm the trace completes.
-
-The database schema is created idempotently at service startup, so the Railway
-PostgreSQL container does not depend on a bind-mounted initialization script.
+`docker-compose.railway.yml` is included as an optional production deployment blueprint. It packages the React app into the public BFF container while keeping the API, orchestrator, worker, PostgreSQL, Redpanda, and Jaeger on a private service network. No paid cloud resources are required to view the public demo or verify the project through GitHub Actions.
 
 ## Run verification
 

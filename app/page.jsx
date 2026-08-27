@@ -6,7 +6,7 @@ const COMPONENTS = [
   {
     id: "web",
     short: "WEB",
-    name: "Application Web",
+    name: "React Web",
     role: "Starts the request",
     zone: "Browser",
     description: "The React client collects the scenario and calls the BFF through the same deployed origin.",
@@ -50,7 +50,7 @@ const COMPONENTS = [
     role: "Carries async events",
     zone: "Event",
     description: "Kafka separates the synchronous request from background processing. The broker must be running and advertised on a reachable listener.",
-    check: "Run docker ps, verify the Kafka container, then compare advertised listeners with the Event Parser connection string.",
+    check: "Verify the Kafka broker is reachable, then compare its advertised listener with the worker connection settings.",
     owns: "Topics, event delivery, consumer offsets"
   },
   {
@@ -114,7 +114,7 @@ const TRACE_STEPS = [
   { component: "api", event: "Call Application API", detail: "BFF exchanges context for a service-to-service bearer token." },
   { component: "orch", event: "Execute workflow", detail: "Orchestrator coordinates application and credit work." },
   { component: "kafka", event: "Publish application event", detail: "Workflow result is placed on the configured topic." },
-  { component: "parser", event: "Consume and parse", detail: "Event Parser receives the message and performs background work." },
+  { component: "parser", event: "Consume and process", detail: "The event worker receives the Kafka message and performs background work." },
   { component: "splunk", event: "Export telemetry", detail: "OpenTelemetry exports correlated spans to the internal Jaeger collector." }
 ];
 
@@ -131,21 +131,21 @@ const TROUBLESHOOTING = [
     label: "401 at API",
     signal: "BFF logs a downstream unauthorized response.",
     checks: ["Request a service token, not a user token", "Check client ID and client secret source", "Match audience to Application API", "Verify local/test app settings override the root correctly"],
-    query: "BFF trace ID → Application API logs"
+    query: "BFF trace ID → Application API structured logs"
   },
   {
     id: "no-credit",
     label: "No credit result",
     signal: "Application request succeeds, but credit data is absent.",
     checks: ["Capture the application UUID", "Search both API and Orchestrator app IDs", "Inspect the orchestrator response payload", "Verify the credit call was invoked and returned"],
-    query: "app IN (API_APP_ID, ORCH_APP_ID) \"<application-uuid>\""
+    query: "trace.id=<trace-id> across API and orchestrator spans"
   },
   {
     id: "no-event",
     label: "Event not processed",
     signal: "The synchronous response succeeds; no worker-side update follows.",
-    checks: ["Confirm Kafka appears in docker ps", "Verify advertised listener and broker URL", "Look for Event Parser consumer-ready log", "Check topic name, consumer group, and offset"],
-    query: "Kafka container → Event Parser logs → topic offsets"
+    checks: ["Confirm Kafka is reachable", "Verify advertised listener and broker URL", "Look for the worker consumer-ready log", "Check topic name, consumer group, and offset"],
+    query: "Kafka broker → worker logs → consumer-group offsets"
   },
   {
     id: "connection",
@@ -196,6 +196,7 @@ export default function Home() {
   const [liveEvents, setLiveEvents] = useState([]);
   const [traceId, setTraceId] = useState("trc_9f2a7c81");
   const [requestError, setRequestError] = useState("");
+  const [metrics, setMetrics] = useState(null);
   const timer = useRef(null);
   const applicationId = "b63fd17e-2c64-4db6";
 
@@ -211,9 +212,14 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     fetch("/api/health")
-      .then((response) => response.json())
-      .then((data) => {
-        if (active) setBackendOnline(data?.service === "bff" && data?.status === "ok");
+      .then(async (response) => {
+        const data = await response.json();
+        const online = data?.service === "bff" && data?.status === "ok";
+        if (active) setBackendOnline(online);
+        if (online) {
+          const metricsResponse = await fetch("/api/metrics");
+          if (metricsResponse.ok && active) setMetrics(await metricsResponse.json());
+        }
       })
       .catch(() => {
         if (active) setBackendOnline(false);
@@ -265,6 +271,15 @@ export default function Home() {
     setRunning(true);
   };
 
+  const refreshMetrics = async () => {
+    try {
+      const response = await fetch("/api/metrics");
+      if (response.ok) setMetrics(await response.json());
+    } catch {
+      // Metrics stay unavailable while the public demo is in simulation mode.
+    }
+  };
+
   const runLiveRequest = async () => {
     setTraceIndex(-1);
     setLiveEvents([]);
@@ -314,6 +329,7 @@ export default function Home() {
           if (workerEvent) {
             setLiveEvents((current) => current.some((event) => event.component === "parser") ? current : [...current, workerEvent]);
             setRunning(true);
+            await refreshMetrics();
             break;
           }
         }
@@ -353,17 +369,24 @@ export default function Home() {
     <main>
       <header className="topbar">
         <a className="brand" href="#flow" aria-label="Backend Request Flow Lab home"><span className="brand-mark"><Icon name="activity" size={19} /></span><span>Request Flow <em>Lab</em></span></a>
-        <nav><a href="#flow">Trace</a><a href="#auth">Auth</a><a href="#troubleshoot">Troubleshoot</a></nav>
-        <span className="private-pill"><Icon name="lock" size={14} /> Private workspace</span>
+        <nav><a href="#flow">Trace</a><a href="#auth">Auth</a><a href="#troubleshoot">Troubleshoot</a><a href="https://github.com/Chakradhar6304/backend-request-flow-lab" target="_blank" rel="noreferrer">GitHub</a></nav>
+        <span className="private-pill"><Icon name="activity" size={14} /> Public portfolio demo</span>
       </header>
 
       <section className="hero" id="flow">
         <div className="hero-copy">
-          <span className="eyebrow">APPLICATION PLATFORM · INTERACTIVE MAP</span>
+          <span className="eyebrow">DISTRIBUTED SYSTEMS · INTERACTIVE LAB</span>
           <h1>See where a request goes.<br /><span>Know where it broke.</span></h1>
           <p>Run a request from the portal through the synchronous API path and asynchronous event pipeline. Click any component to inspect its responsibility.</p>
         </div>
         <div className="hero-metric"><span>Flow coverage</span><strong>7</strong><small>connected components</small></div>
+
+        <div className="proof-strip" aria-label="Runtime proof">
+          <article><span>Runtime</span><strong>{backendOnline ? "Live backend" : "Simulation"}</strong><small>{backendOnline ? "Services connected" : "Free interactive mode"}</small></article>
+          <article><span>Processed traces</span><strong>{metrics ? metrics.totalRequests : "CI verified"}</strong><small>{metrics ? "Persisted in PostgreSQL" : "Full stack tested on every push"}</small></article>
+          <article><span>Success rate</span><strong>{metrics ? `${metrics.successRate}%` : "5 scenarios"}</strong><small>{metrics ? `${metrics.completed} completed` : "Healthy and failure paths"}</small></article>
+          <article><span>Trace latency p95</span><strong>{metrics ? `${metrics.p95DurationMs} ms` : "Measured"}</strong><small>{metrics ? "Across persisted events" : "Available with live services"}</small></article>
+        </div>
 
         <div className="lab-shell">
           <div className="lab-toolbar">
@@ -454,7 +477,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer><span>Backend Request Flow Lab</span><p>Built as a learning and debugging companion · Example IDs only</p><a href="#flow">Back to trace ↑</a></footer>
+      <footer><span>Backend Request Flow Lab</span><p>TypeScript · Fastify · PostgreSQL · Kafka · OpenTelemetry</p><a href="https://github.com/Chakradhar6304/backend-request-flow-lab" target="_blank" rel="noreferrer">View source on GitHub ↗</a></footer>
     </main>
   );
 }

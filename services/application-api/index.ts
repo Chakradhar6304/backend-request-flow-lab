@@ -4,6 +4,7 @@ import { config } from "../../shared/config.js";
 import { callService } from "../../shared/http.js";
 import { startTelemetry, withSpan } from "../../shared/telemetry.js";
 import {
+  type MetricsResponse,
   RequestSchema,
   traceEvent,
   type TraceResponse
@@ -100,6 +101,32 @@ app.get("/v1/traces/:traceId", async (request, reply) => {
     "GET",
     token,
     traceId
+  );
+  return reply.code(result.status).send(result.payload);
+});
+
+app.get("/v1/metrics", async (request, reply) => {
+  try {
+    await verifyBearer(
+      request.headers.authorization,
+      "application-api",
+      config.serviceTokenSecret,
+      "service"
+    );
+  } catch {
+    return reply.code(401).send({ error: "Invalid service token" });
+  }
+
+  const token = await issueServiceToken(
+    "application-api",
+    "workflow-orchestrator",
+    config.serviceTokenSecret
+  );
+  const result = await callService<MetricsResponse>(
+    `${config.orchestratorUrl}/v1/metrics`,
+    "GET",
+    token,
+    "metrics"
   );
   return reply.code(result.status).send(result.payload);
 });

@@ -44,6 +44,16 @@ export type TraceResponse = {
   error?: string;
 };
 
+export type MetricsResponse = {
+  totalRequests: number;
+  completed: number;
+  degraded: number;
+  failed: number;
+  inProgress: number;
+  successRate: number;
+  p95DurationMs: number;
+};
+
 export function traceEvent(
   component: TraceEvent["component"],
   event: string,

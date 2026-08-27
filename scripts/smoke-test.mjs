@@ -27,19 +27,25 @@ const tokenResponse = await fetch(`${bffUrl}/api/demo-token`, { method: "POST" }
 if (!tokenResponse.ok) throw new Error("Could not obtain the demo user token");
 const { token } = await tokenResponse.json();
 
-const requestResponse = await fetch(`${bffUrl}/api/requests`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${token}`,
-    "content-type": "application/json"
-  },
-  body: JSON.stringify({ scenario: "happy" })
-});
-if (requestResponse.status !== 202) {
-  throw new Error(`Expected 202, received ${requestResponse.status}`);
+async function runScenario(scenario, expectedStatus, authorization = token) {
+  const response = await fetch(`${bffUrl}/api/requests`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${authorization}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ scenario })
+  });
+  const payload = await response.json();
+  if (response.status !== expectedStatus) {
+    throw new Error(
+      `${scenario}: expected ${expectedStatus}, received ${response.status}: ${JSON.stringify(payload)}`
+    );
+  }
+  return payload;
 }
 
-const created = await requestResponse.json();
+const created = await runScenario("happy", 202);
 console.log(`Created ${created.applicationId} with trace ${created.traceId}`);
 
 let trace;
@@ -56,4 +62,23 @@ if (trace?.status !== "completed") {
   throw new Error(`Trace did not complete: ${JSON.stringify(trace)}`);
 }
 
-console.log(`Smoke test passed with ${trace.events.length} persisted events.`);
+await runScenario("userToken", 401, "invalid-user-token");
+await runScenario("serviceToken", 401);
+await runScenario("kafkaDown", 503);
+await runScenario("creditMissing", 200);
+
+const metricsResponse = await fetch(`${bffUrl}/api/metrics`);
+if (!metricsResponse.ok) throw new Error("Metrics endpoint is unavailable");
+const metrics = await metricsResponse.json();
+if (
+  metrics.totalRequests < 3 ||
+  metrics.completed < 1 ||
+  metrics.degraded < 1 ||
+  metrics.failed < 1
+) {
+  throw new Error(`Metrics did not include every persisted outcome: ${JSON.stringify(metrics)}`);
+}
+
+console.log(
+  `Smoke test passed: ${trace.events.length} trace events, five scenarios, ${metrics.totalRequests} measured requests.`
+);

@@ -1,6 +1,6 @@
 import pg from "pg";
 import { config } from "./config.js";
-import type { Scenario, TraceEvent } from "./types.js";
+import type { MetricsResponse, Scenario, TraceEvent } from "./types.js";
 
 const { Pool } = pg;
 export const pool = new Pool({ connectionString: config.databaseUrl });
@@ -110,5 +110,42 @@ export async function getTrace(traceId: string): Promise<{
       durationMs: item.duration_ms,
       timestamp: new Date(item.created_at).toISOString()
     }))
+  };
+}
+
+export async function getMetrics(): Promise<MetricsResponse> {
+  const result = await pool.query(`
+    WITH trace_durations AS (
+      SELECT trace_id, SUM(duration_ms)::INTEGER AS total_duration_ms
+      FROM trace_events
+      GROUP BY trace_id
+    )
+    SELECT
+      COUNT(*)::INTEGER AS total_requests,
+      COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed,
+      COUNT(*) FILTER (WHERE status = 'degraded')::INTEGER AS degraded,
+      COUNT(*) FILTER (WHERE status = 'event_publish_failed')::INTEGER AS failed,
+      COUNT(*) FILTER (WHERE status IN ('started', 'event_published'))::INTEGER AS in_progress,
+      COALESCE(
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY trace_durations.total_duration_ms),
+        0
+      )::INTEGER AS p95_duration_ms
+    FROM applications
+    LEFT JOIN trace_durations USING (trace_id)
+  `);
+
+  const row = result.rows[0];
+  const totalRequests = Number(row.total_requests);
+  const completed = Number(row.completed);
+
+  return {
+    totalRequests,
+    completed,
+    degraded: Number(row.degraded),
+    failed: Number(row.failed),
+    inProgress: Number(row.in_progress),
+    successRate:
+      totalRequests === 0 ? 0 : Math.round((completed / totalRequests) * 1000) / 10,
+    p95DurationMs: Number(row.p95_duration_ms)
   };
 }

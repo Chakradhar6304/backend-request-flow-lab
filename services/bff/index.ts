@@ -12,6 +12,7 @@ import { config } from "../../shared/config.js";
 import { callService } from "../../shared/http.js";
 import { startTelemetry, withSpan } from "../../shared/telemetry.js";
 import {
+  type MetricsResponse,
   RequestSchema,
   traceEvent,
   type TraceResponse
@@ -134,6 +135,21 @@ app.get("/api/traces/:traceId", async (request, reply) => {
     "GET",
     serviceToken,
     traceId
+  );
+  return reply.code(result.status).send(result.payload);
+});
+
+app.get("/api/metrics", async (_request, reply) => {
+  const serviceToken = await issueServiceToken(
+    "request-flow-bff",
+    "application-api",
+    config.serviceTokenSecret
+  );
+  const result = await callService<MetricsResponse>(
+    `${config.applicationApiUrl}/v1/metrics`,
+    "GET",
+    serviceToken,
+    "metrics"
   );
   return reply.code(result.status).send(result.payload);
 });

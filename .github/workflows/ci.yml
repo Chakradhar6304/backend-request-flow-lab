@@ -21,6 +21,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:all
+      - run: npm run validate:deployment
       - run: docker compose config --quiet
       - run: docker compose -f docker-compose.railway.yml config --quiet
         env:
@@ -42,3 +43,32 @@ jobs:
         run: docker compose logs --no-color
       - if: always()
         run: docker compose down --volumes
+
+  public-runtime:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:all
+      - run: docker compose up --detach --wait postgres redpanda jaeger
+      - name: Start single-container public runtime
+        run: |
+          PORT=3101 \
+          DATABASE_URL=postgres://requestflow:requestflow@localhost:5432/requestflow \
+          KAFKA_BROKERS=localhost:19092 \
+          USER_TOKEN_SECRET=ci-user-token-secret \
+          SERVICE_TOKEN_SECRET=ci-service-token-secret \
+          node scripts/start-public.mjs > public-runtime.log 2>&1 &
+          echo $! > public-runtime.pid
+      - run: BFF_URL=http://localhost:3101 npm run smoke
+      - if: failure()
+        run: cat public-runtime.log
+      - if: always()
+        run: |
+          if [ -f public-runtime.pid ]; then kill "$(cat public-runtime.pid)" || true; fi
+          docker compose down --volumes

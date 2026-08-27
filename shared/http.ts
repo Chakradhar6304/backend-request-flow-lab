@@ -1,12 +1,12 @@
 import type { TraceResponse } from "./types.js";
 
-export async function callService(
+export async function callService<TPayload = TraceResponse>(
   url: string,
   method: "GET" | "POST",
   token: string,
   traceId: string,
   body?: unknown
-): Promise<{ status: number; payload: TraceResponse }> {
+): Promise<{ status: number; payload: TPayload }> {
   const response = await fetch(url, {
     method,
     headers: {
@@ -20,6 +20,6 @@ export async function callService(
 
   return {
     status: response.status,
-    payload: (await response.json()) as TraceResponse
+    payload: (await response.json()) as TPayload
   };
 }

@@ -5,6 +5,7 @@ import { config } from "../../shared/config.js";
 import {
   createApplication,
   ensureSchema,
+  getMetrics,
   getTrace,
   recordTraceEvent,
   updateApplicationStatus
@@ -160,6 +161,21 @@ app.get("/v1/traces/:traceId", async (request, reply) => {
   const result = await getTrace(traceId);
   if (!result) return reply.code(404).send({ error: "Trace not found", traceId });
   return result;
+});
+
+app.get("/v1/metrics", async (request, reply) => {
+  try {
+    await verifyBearer(
+      request.headers.authorization,
+      "workflow-orchestrator",
+      config.serviceTokenSecret,
+      "service"
+    );
+  } catch {
+    return reply.code(401).send({ error: "Invalid service token" });
+  }
+
+  return getMetrics();
 });
 
 await app.listen({
